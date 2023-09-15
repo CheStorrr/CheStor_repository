@@ -1,0 +1,207 @@
+
+from aiogram import Bot, Dispatcher, F
+from aiogram.types import Message
+from aiogram.filters import Command
+import sqlite3 as sq
+import asyncio, logging
+from random import *
+import time
+
+
+TOKEN = "6624505123:AAE0mu15CTXgo5qORpV3S5VhfBa8XG8HDao"
+
+logging.basicConfig(level=logging.INFO)
+dp = Dispatcher()
+
+def connect():
+    global db, cur
+    db = sq.connect("TgBot2.db")
+    cur = db.cursor()
+    return db, cur
+
+def create_tables():
+    connect()
+    cur.execute("""CREATE TABLE IF NOT EXISTS users(
+    user_id INTEGER,
+    username TEXT,
+    fullname TEXT,
+    god_karma INTEGER DEFAULT 0,
+    plo_karma INTEGER DEFAULT 0,
+    karma INTEGER DEFAULT 0,
+    immunitet INTEGER DEFAULT 0
+    )""")
+    db.commit()
+
+def is_admin(user_id, chat) -> bool:
+  one = 1,
+  if cur.execute(f"SELECT is_admin FROM {chat} WHERE user_id = ?", (user_id,)) == one:
+    return True
+  else:
+    return False
+
+@dp.message(Command("help"))
+async def help_cmd(message: Message):
+  await message.answer("Помочь тебе надо, уебан?")
+
+@dp.message(F.content_type.in_({'new_chat_members'}))
+async def new_member_handler(message: Message):
+    me = await bot.get_me()
+    for member in message.new_chat_members:
+        if member.id == me.id:
+          connect()
+          chat_id = message.chat.id
+          cur.execute(f"""CREATE TABLE IF NOT EXISTS {str(chat_id).replace("-", "_")} (
+                user_id INTEGER,
+                username TEXT,
+                fullname TEXT,
+                is_admin INTEGER DEFAULT "0",
+                is_mute INTEGER DEFAULT "0",
+                description TEXT DEFAULT "Ты не указывал, але",
+                immun INTEGER DEFAULT "0"
+            )""")
+          await message.answer("Ну что детки, ща будет весело!")
+
+global govor
+govor = 0
+@dp.message(F.photo, F.sticker, F.animation, F.video)
+async def on_mut(message: Message):
+  chat_id = message.chat.id
+  chat_db = chat_id
+  if "-" in str(chat_id):
+    chat_db = str(chat_id).replace("-", "_")
+  connect()
+  one = 1,
+  if cur.execute(f"SELECT is_mute FROM {chat_db} WHERE user_id = ?", (message.from_user.id,)).fetchone() == one:
+    await message.delete()
+
+@dp.message(F.text)
+async def all_msg(message: Message):
+  connect()
+  create_tables()
+  myid = 5838345618
+  one = 1,
+  ones = 1
+  zero = 0,
+  texts = message.text
+  text = texts.lower()
+  chat_id = message.chat.id
+  chat_db = chat_id
+  if "-" in str(chat_id):
+    chat_db = str(chat_id).replace("-", "_")
+  user_id = message.from_user.id
+  username = message.from_user.username
+  fullname = message.from_user.full_name
+  split = text.split()
+  if cur.execute(f"SELECT is_admin FROM {chat_db} WHERE user_id = ?", (myid,)).fetchone() == zero:
+    cur.execute(f"UPDATE {chat_db} SET is_admin = {ones} WHERE user_id = ?", (myid,))
+  if cur.execute(f"SELECT is_mute FROM {chat_db} WHERE user_id = ?", (myid,)).fetchone() == one:
+    cur.execute(f"UPDATE {chat_db} SET is_mute = 0 WHERE user_id = ?", (myid,))
+  if cur.execute("SELECT user_id FROM users WHERE user_id = ?", (user_id,)).fetchone() is None:
+    cur.execute("INSERT INTO users (user_id, username, fullname) VALUES (?, ?, ?)", (user_id, username, fullname,))
+    db.commit()
+  try:
+    if cur.execute(f"SELECT user_id FROM {chat_db} WHERE user_id = ?", (user_id,)).fetchone() is None:
+      cur.execute(f"INSERT INTO {chat_db} (user_id, username, fullname) VALUES (?, ?, ?)", (user_id, username, fullname,))
+      db.commit()
+  except Exception as e:
+    await message.answer(str(e))
+  
+  frazi = "Парни, мне так нравится, когда толстый член пронизывает мою жопу", "Я сегодня сказал своей маме, чтобы она больше не валялась в канаве", "Сперма на самом деле такая вкусная, всем советую", "Обожаю волосатых негров", "Сига пидарас", "Я люблю сосать член", "Моя мама мне вчера отрезала яица и продала за бутылку водки", "Мама рассказывала мне, как меня уебали головой при родах"
+  if cur.execute(f"SELECT is_mute FROM {chat_db} WHERE user_id = ?", (user_id,)).fetchone() == one:
+    global govor
+    await message.delete()
+    govor = govor + 1
+    
+    if govor % 5 == 0:
+      await message.answer(f"Хуепутоло по имени {fullname} сказал вам:\n{choice(frazi)}")
+    
+  else:
+    if text == "кто админы":
+	    admines = cur.execute(f"SELECT fullname FROM {chat_db} WHERE is_admin = 1").fetchall()
+	    admins_str = '\n'.join(str(admin[0]) for admin in admines)
+	    await message.answer(f"Одмэны: \n {str(admins_str)}")
+    if text == "мут?":
+        is_mute = cur.execute(f"SELECT is_mute FROM {chat_db} WHERE user_id = ?", (message.from_user.id,)).fetchone()
+        await message.answer(f"{is_mute}")
+    if cur.execute(f"SELECT is_admin FROM {chat_db} WHERE user_id = ?", (user_id,)).fetchone() == one:
+      if text == "назначить админом":
+         if cur.execute(f"SELECT is_admin FROM {chat_db} WHERE user_id = ?", (message.reply_to_message.from_user.id,)).fetchone() == zero:
+           cur.execute(f"UPDATE {chat_db} SET is_admin = 1 WHERE user_id = ?", (message.reply_to_message.from_user.id,))
+           db.commit()
+           await message.answer(f"Чел-с {message.reply_to_message.from_user.full_name} Теперь типа админ ")
+         else:
+           await message.answer("Он и так админ по моему")
+      if text == "этот чат":
+        chat = cur.execute(f"SELECT * FROM {chat_db}").fetchall()
+        await message.answer(f"{chat}")
+    if text == "бот" or text == "честор":
+      await message.answer("Че бля?")
+    if "мам" in text or "отчим" in text or "канав" in text or "батя" in text or "батю" in text or "сестру" in text or "сос" in text or "шлюх" in text:
+          one = 1
+          await message.delete()
+          await message.answer(f"айяйяй, {fullname}, ты по моему ахуел, причем в край")
+          cur.execute(f"UPDATE {chat_db} SET is_mute = {one} WHERE user_id = ?", (user_id,))
+          db.commit()
+          await asyncio.sleep(60*60*24*5)
+          nul = 0
+          cur.execute(f"UPDATE {chat_db} SET is_mute = {nul} WHERE user_id = ?", (user_id,))
+    try:
+      if message.reply_to_message:
+        if "мам" in text or "отчим" in text or "канав" in text or "батя" in text or "батю" in text or "сестру" in text or "сос" in text or "шлюх" in text or "мать" in text or "матер" in text:
+          one = 1
+          await message.delete()
+          await message.answer(f"айяйяй, {fullname}, ты по моему ахуел, причем в край")
+          cur.execute(f"UPDATE {chat_db} SET is_mute = {one} WHERE user_id = ?", (user_id,))
+          db.commit()
+          await asyncio.sleep(60*60*24*5)
+          nul = 0
+          cur.execute(f"UPDATE {chat_db} SET is_mute = {nul} WHERE user_id = ?", (user_id,))
+        if message.reply_to_message.from_user.username == "Chestor_chat_bot":  
+          if "еб" in text or "шлюх" in text or "твар" in text or "мам" in text or "хуе" in text or "хуи" in text or "бля" in text or "мать" in text or "матер" in text:
+            if user_id == myid:
+              await message.answer("О, создатель, я умоляю вас! Простите меня, грешного")
+            else:
+              cur.execute(f"UPDATE {chat_db} SET is_mute = 1 WHERE user_id = ?", (user_id,))
+              db.commit()
+              await message.answer("Ебальник прикрой, чепушила")
+              await asyncio.sleep(randint(10, 60)*60)
+              cur.execute(f"UPDATE {chat_db} SET is_mute = 0 WHERE user_id = ?", (user_id,))
+              db.commit()
+
+        if is_admin(user_id, chat_db):
+          if split[0] == "мут":
+            if message.reply_to_message.from_user.id == 5838345618:
+              if message.from_user.id == 5838345618:
+                await message.reply("Ты долбаеб?")
+              else:
+                await message.answer("Нихуя ты умный, а ты вкурсе что он мой создатель?")
+        
+            time_mute = int(split[1])
+            time_mute = int(time_mute)
+            if "сек" in split[2]:
+              one = 1
+              cur.execute(f"UPDATE {chat_db} SET is_mute = {one} WHERE user_id = ?", (message.reply_to_message.from_user.id,))
+              db.commit()
+              is_mute = cur.execute(f"SELECT is_mute FROM {chat_db} WHERE user_id = ?", (message.reply_to_message.from_user.full_name,)).fetchone()
+              await message.answer(f"Чел-с {message.reply_to_message.from_user.full_name} отлетает на {time_mute} секунд.")
+              await asyncio.sleep(time_mute)
+              cur.execute(f"UPDATE {chat_db} SET is_mute = 0 WHERE user_id = ?", (message.reply_to_message.from_user.id,))
+              db.commit()
+              await message.answer(f"Ну все, чел-с {message.reply_to_message.from_user.full_name} размучен")
+          zero = 0
+        if text == "размут":
+          cur.execute(f"UPDATE {chat_db} SET is_mute = {zero} WHERE user_id = ?", (message.reply_to_message.from_user.id,))
+          db.commit()
+          await message.answer(f"Чел-с {message.reply_to_message.from_user.full_name} теперь может базарить")
+      
+    except Exception as e:
+      await message.answer(f"Неверные данные")
+
+async def main() -> None:
+  global bot
+  bot = Bot(TOKEN)
+  await dp.start_polling(bot)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
